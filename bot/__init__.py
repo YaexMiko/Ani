@@ -41,7 +41,7 @@ class Var:
 
     RSS_ITEMS = getenv("RSS_ITEMS", "https://subsplease.org/rss/?r=1080").split()
     POST_STICKERS = [
-    "CAACAgUAAxkBAAEOQq5n9RaWZMa0mRUyeRQ1D4_wj1xdgQADFQAClP0pVztrIQO4kT1INgQ"
+    "CAACAgUAAxkBAAEOQrNn9Rk3oEioYjivqQUbG0_M19m2DAAC4BMAAp6PIFcLAAGEEdQGq4s2BA"
 ]
     FSUB_CHATS = list(map(int, getenv('FSUB_CHATS').split()))
     BACKUP_CHANNEL = getenv("BACKUP_CHANNEL") or ""
