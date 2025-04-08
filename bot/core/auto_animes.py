@@ -19,10 +19,10 @@ from .tguploader import TgUploader
 from .reporter import rep
 
 btn_formatter = {
+'Hdrip': 'HDRip',
     '1080': '1080p',
     '720': '720p',
-    '480': '480p',
-    'Hdrip': 'HDRip',
+    '480': '480p',    
 }
 
 async def fetch_animes():
