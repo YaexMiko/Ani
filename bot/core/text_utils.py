@@ -4,7 +4,6 @@ from random import choice
 from asyncio import sleep as asleep
 from aiohttp import ClientSession
 from anitopy import parse
-
 from bot import Var, bot
 from .ffencoder import ffargs
 from .func_utils import handle_logs
@@ -18,8 +17,6 @@ CAPTION_FORMAT = """
 ➥ 𝙰𝚞𝚍𝚒𝚘 : 𝙼𝚞𝚕𝚝𝚒 𝚀𝚞𝚊𝚕𝚒𝚝𝚢 [𝚂𝚞𝚋]</b>
 <b>──────────────────────────</b>
 """
-
-GENRES_EMOJI = {"Action": "ðŸ‘Š", "Adventure": choice(['ðŸª‚', 'ðŸ§—â€â™€']), "Comedy": "ðŸ¤£", "Drama": " ðŸŽ­", "Ecchi": choice(['ðŸ’‹', 'ðŸ¥µ']), "Fantasy": choice(['ðŸ§ž', 'ðŸ§žâ€â™‚', 'ðŸ§žâ€â™€','ðŸŒ—']), "Hentai": "ðŸ”ž", "Horror": "â˜ ", "Mahou Shoujo": "â˜¯", "Mecha": "ðŸ¤–", "Music": "ðŸŽ¸", "Mystery": "ðŸ”®", "Psychological": "â™Ÿ", "Romance": "ðŸ’ž", "Sci-Fi": "ðŸ›¸", "Slice of Life": choice(['â˜˜','ðŸ']), "Sports": "âš½ï¸", "Supernatural": "ðŸ«§", "Thriller": choice(['ðŸ¥¶', 'ðŸ”ª','ðŸ¤¯'])}
 
 ANIME_GRAPHQL_QUERY = """
 query ($id: Int, $search: String, $seasonYear: Int) {
@@ -106,31 +103,29 @@ class AniLister:
         self.__api = "https://graphql.anilist.co"
         self.__ani_name = anime_name
         self.__ani_year = year
-        self.__vars = {'search' : self.__ani_name, 'seasonYear': self.__ani_year}
-    
+        self.__vars = {'search': self.__ani_name, 'seasonYear': self.__ani_year}
+
     def __update_vars(self, year=True) -> None:
         if year:
             self.__ani_year -= 1
             self.__vars['seasonYear'] = self.__ani_year
         else:
-            self.__vars = {'search' : self.__ani_name}
-    
+            self.__vars = {'search': self.__ani_name}
+
     async def post_data(self):
         async with ClientSession() as sess:
             async with sess.post(self.__api, json={'query': ANIME_GRAPHQL_QUERY, 'variables': self.__vars}) as resp:
                 return (resp.status, await resp.json(), resp.headers)
-        
+
     async def get_anidata(self):
         res_code, resp_json, res_heads = await self.post_data()
         while res_code == 404 and self.__ani_year > 2020:
             self.__update_vars()
             await rep.report(f"AniList Query Name: {self.__ani_name}, Retrying with {self.__ani_year}", "warning", log=False)
             res_code, resp_json, res_heads = await self.post_data()
-        
         if res_code == 404:
             self.__update_vars(year=False)
             res_code, resp_json, res_heads = await self.post_data()
-        
         if res_code == 200:
             return resp_json.get('data', {}).get('Media', {}) or {}
         elif res_code == 429:
@@ -145,7 +140,7 @@ class AniLister:
         else:
             await rep.report(f"AniList API Error: {res_code}", "error", log=False)
             return {}
-    
+
 class TextEditor:
     def __init__(self, name):
         self.__name = name
@@ -167,7 +162,7 @@ class TextEditor:
     async def get_id(self):
         if (ani_id := self.adata.get('id')) and str(ani_id).isdigit():
             return ani_id
-            
+
     @handle_logs
     async def parse_name(self, no_s=False, no_y=False):
         anime_name = self.pdata.get("anime_title")
@@ -181,13 +176,13 @@ class TextEditor:
                 pname += f" {anime_year}"
             return pname
         return anime_name
-        
+
     @handle_logs
     async def get_poster(self):
         if anime_id := await self.get_id():
             return f"https://img.anili.st/media/{anime_id}"
         return "https://telegra.ph/file/112ec08e59e73b6189a20.jpg"
-        
+
     @handle_logs
     async def get_upname(self, qual=""):
         anime_name = self.pdata.get("anime_title")
@@ -200,22 +195,27 @@ class TextEditor:
 
     @handle_logs
     async def get_caption(self):
-        sd = self.adata.get('startDate', {})
-        startdate = f"{month_name[sd['month']]} {sd['day']}, {sd['year']}" if sd.get('day') and sd.get('year') else ""
-        ed = self.adata.get('endDate', {})
-        enddate = f"{month_name[ed['month']]} {ed['day']}, {ed['year']}" if ed.get('day') and ed.get('year') else ""
         titles = self.adata.get("title", {})
-        
+        season_no = self.pdata.get("anime_season") or "1"
+        ep_no = self.pdata.get("episode_number") or "?"
+        genres = ", ".join(self.adata.get("genres") or [])
+        rating = self.adata.get("meanScore") or self.adata.get("averageScore") or "N/A"
+        source_title = titles.get("english") or titles.get("romaji") or titles.get("native") or "Unknown"
+        next_ep_data = self.adata.get("nextAiringEpisode", {})
+
+        if next_ep_data:
+            airing_time = datetime.fromtimestamp(next_ep_data.get("airingAt"))
+            next_ep = airing_time.strftime("%b %d, %Y, %H:%M %Z") + " JST"
+        else:
+            next_ep = "Unknown"
+
         return CAPTION_FORMAT.format(
-                title=titles.get('english') or titles.get('romaji') or title.get('native'),
-                form=self.adata.get("format") or "N/A",
-                genres=", ".join(f"{GENRES_EMOJI[x]} #{x.replace(' ', '_').replace('-', '_')}" for x in (self.adata.get('genres') or [])),
-                avg_score=f"{sc}%" if (sc := self.adata.get('averageScore')) else "N/A",
-                status=self.adata.get("status") or "N/A",
-                start_date=startdate or "N/A",
-                end_date=enddate or "N/A",
-                t_eps=self.adata.get("episodes") or "N/A",
-                plot= (desc if (desc := self.adata.get("description") or "N/A") and len(desc) < 200 else desc[:200] + "..."),
-                ep_no=self.pdata.get("episode_number"),
-                cred=Var.BRAND_UNAME,
-            )
+            title=source_title,
+            season=season_no,
+            ep_no=ep_no,
+            rating=rating,
+            genres=genres,
+            source_title=source_title,
+            next_ep=next_ep,
+            cred=Var.BRAND_UNAME
+        )
