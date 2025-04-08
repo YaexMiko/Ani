@@ -58,16 +58,16 @@ class TgUploader:
             speed = current / diff 
             eta = round((total - current) / speed)
             bar = floor(percent/8)*"â–ˆ" + (12 - floor(percent/8))*"â–’"
-            progress_str = f"""â€£ <b>Anime Name :</b> <b><i>{self.__name}</i></b>
+            progress_str = f"""<blockquote>‣ <b>Anime Name :</b> <b>{self.__name}</b></blockquote>
 
-â€£ <b>Status :</b> <i>Uploading</i>
+<blockquote>‣ <b>𝚂𝚝𝚊𝚝𝚞𝚜 : </b> <b>𝚄𝚙𝚕𝚘𝚍𝚒𝚗𝚐 𝚈𝚘𝚞𝚛 𝙴𝚙𝚒𝚜𝚘𝚍𝚎</b> </blockquote>
     <code>[{bar}]</code> {percent}%
     
-    â€£ <b>Size :</b> {convertBytes(current)} out of ~ {convertBytes(total)}
-    â€£ <b>Speed :</b> {convertBytes(speed)}/s
-    â€£ <b>Time Took :</b> {convertTime(diff)}
-    â€£ <b>Time Left :</b> {convertTime(eta)}
+    <blockquote>‣ <b>𝚂𝚒𝚣𝚎 : </b> {convertBytes(current)} 𝙾𝚞𝚝 𝙾𝚏 ~ {convertBytes(total)}
+    ‣ <b>𝚂𝚙𝚎𝚎𝚍 : </b> {convertBytes(speed)}/s
+    ‣ <b>𝚃𝚒𝚖𝚎 𝚃𝚘𝚘𝚔 : </b> {convertTime(diff)}
+    ‣ <b>𝚃𝚒𝚖𝚎 𝙻𝚎𝚏𝚝 : </b> {convertTime(eta)} </blockquote>
 
-â€£ <b>File(s) Encoded:</b> <code>{Var.QUALS.index(self.__qual)} / {len(Var.QUALS)}</code>"""
+<blockquote>‣ <b>𝙵𝚒𝚕𝚎(𝚜) 𝙴𝚗𝚌𝚘𝚍𝚎𝚍 : </b> <code>{Var.QUALS.index(self.__qual)} / {len(Var.QUALS)}</code></blockquote>"""
             
             await editMessage(self.message, progress_str)
