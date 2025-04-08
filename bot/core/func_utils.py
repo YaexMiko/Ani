@@ -11,7 +11,7 @@ from asyncio import sleep as asleep, create_subprocess_shell
 from asyncio.subprocess import PIPE
 from base64 import urlsafe_b64encode, urlsafe_b64decode
 
-from aiohttp import ClientSession, TCPConnector
+from aiohttp import ClientSession
 from aiofiles import open as aiopen
 from aioshutil import rmtree as aiormtree
 from html_telegraph_poster import TelegraphPoster
@@ -55,22 +55,15 @@ async def getfeed(link, index=0):
 
 @handle_logs
 async def aio_urldownload(link):
-    connector = TCPConnector(limit=0, force_close=True, enable_cleanup_closed=True)
-    async with ClientSession(connector=connector) as sess:
-        try:
-            async with sess.get(link, timeout=30) as data:
-                if data.status != 200:
-                    raise Exception(f"HTTP Error {data.status}")
-                image = await data.read()
-            path = f"thumbs/{link.split('/')[-1]}"
-            if not path.endswith((".jpg", ".png", ".jpeg")):
-                path += ".jpg"
-            async with aiopen(path, "wb") as f:
-                await f.write(image)
-            return path
-        except Exception as e:
-            await rep.report(f"Failed to download {link}: {str(e)}", "error")
-            return None
+    async with ClientSession() as sess:
+        async with sess.get(link) as data:
+            image = await data.read()
+    path = f"thumbs/{link.split('/')[-1]}"
+    if not path.endswith((".jpg" or ".png")):
+        path += ".jpg"
+    async with aiopen(path, "wb") as f:
+        await f.write(image)
+    return path
 
 @handle_logs
 async def get_telegraph(out):
@@ -91,44 +84,39 @@ async def get_telegraph(out):
 async def sendMessage(chat, text, buttons=None, get_error=False, **kwargs):
     try:
         if isinstance(chat, int):
-            try:
-                return await bot.send_message(chat_id=chat, text=text, disable_web_page_preview=True,
-                                            disable_notification=False, reply_markup=buttons, **kwargs)
-            except ValueError as e:
-                if "Peer id invalid" in str(e):
-                    await rep.report(f"Invalid channel ID: {chat}. Please check Var.MAIN_CHANNEL value.", "error")
-                raise
+            return await bot.send_message(chat_id=chat, text=text, disable_web_page_preview=True,
+                                        disable_notification=False, reply_markup=buttons, **kwargs)
         else:
             return await chat.reply(text=text, quote=True, disable_web_page_preview=True, disable_notification=False,
                                     reply_markup=buttons, **kwargs)
     except FloodWait as f:
-        await rep.report(f"FloodWait: Sleeping for {f.value} seconds", "warning")
-        await asleep(f.value * 1.2)
+        await rep.report(f, "warning")
+        sleep(f.value * 1.2)
         return await sendMessage(chat, text, buttons, get_error, **kwargs)
     except ReplyMarkupInvalid:
         return await sendMessage(chat, text, None, get_error, **kwargs)
     except Exception as e:
-        await rep.report(f"Failed to send message: {format_exc()}", "error")
+        await rep.report(format_exc(), "error")
         if get_error:
             raise e
         return str(e)
         
 async def editMessage(msg, text, buttons=None, get_error=False, **kwargs):
     try:
-        if not msg or isinstance(msg, str):
+        if not msg:
             return None
         return await msg.edit_text(text=text, disable_web_page_preview=True, 
                                         reply_markup=buttons, **kwargs)
     except FloodWait as f:
-        await rep.report(f"FloodWait: Sleeping for {f.value} seconds", "warning")
-        await asleep(f.value * 1.2)
+        await rep.report(f, "warning")
+        sleep(f.value * 1.2)
         return await editMessage(msg, text, buttons, get_error, **kwargs)
     except ReplyMarkupInvalid:
         return await editMessage(msg, text, None, get_error, **kwargs)
     except (MessageNotModified, MessageIdInvalid):
         pass
     except Exception as e:
-        await rep.report(f"Failed to edit message: {format_exc()}", "error")
+        await rep.report(format_exc(), "error")
         if get_error:
             raise e
         return str(e)
@@ -145,12 +133,10 @@ async def is_fsubbed(uid):
     for chat_id in Var.FSUB_CHATS:
         try:
             member = await bot.get_chat_member(chat_id=chat_id, user_id=uid)
-            if member.status not in [ChatMemberStatus.OWNER, ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.MEMBER]:
-                return False
         except UserNotParticipant:
             return False
         except Exception as err:
-            await rep.report(f"Failed to check FSub status: {format_exc()}", "warning")
+            await rep.report(format_exc(), "warning")
             continue
     return True
         
@@ -161,12 +147,13 @@ async def get_fsubs(uid, txtargs):
         try:
             cha = await bot.get_chat(chat)
             member = await bot.get_chat_member(chat_id=chat, user_id=uid)
-            sta = "Joined âœ…ï¸" if member.status in [ChatMemberStatus.OWNER, ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.MEMBER] else "Not Joined âŒï¸"
-            if sta == "Not Joined âŒï¸":
-                inv = await bot.create_chat_invite_link(chat_id=chat)
-                btns.append([InlineKeyboardButton(cha.title, url=inv.invite_link)])
+            sta = "Joined âœ…ï¸"
+        except UserNotParticipant:
+            sta = "Not Joined âŒï¸"
+            inv = await bot.create_chat_invite_link(chat_id=chat)
+            btns.append([InlineKeyboardButton(cha.title, url=inv.invite_link)])
         except Exception as err:
-            await rep.report(f"Failed to get FSub info: {format_exc()}", "warning")
+            await rep.report(format_exc(), "warning")
             continue
         txt += f"<b>{no}. Title :</b> <i>{cha.title}</i>\n  <b>Status :</b> <i>{sta}</i>\n\n"
     if len(txtargs) > 1:
@@ -187,18 +174,14 @@ async def mediainfo(file, get_json=False, get_duration=False):
                 return 1440 # 24min
         return await get_telegraph(stdout.decode())
     except Exception as err:
-        await rep.report(f"Failed to get mediainfo: {format_exc()}", "error")
+        await rep.report(format_exc(), "error")
         return ""
         
 async def clean_up():
     try:
-        for dirtree in ("downloads", "thumbs", "encode"):
-            try:
-                await aiormtree(dirtree)
-            except Exception as e:
-                LOGS.error(f"Failed to cleanup {dirtree}: {str(e)}")
+        (await aiormtree(dirtree) for dirtree in ("downloads", "thumbs", "encode"))
     except Exception as e:
-        LOGS.error(f"Cleanup error: {str(e)}")
+        LOGS.error(str(e))
 
 def convertTime(s: int) -> str:
     m, s = divmod(int(s), 60)
