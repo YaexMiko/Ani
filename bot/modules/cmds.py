@@ -110,4 +110,4 @@ async def add_task(client, message):
         return await sendMessage(message, "<b>No Task Found to Add for the Provided Link</b>")
     
     ani_task = bot_loop.create_task(get_animes(taskInfo.title, taskInfo.link, True))
-    await sendMessage(message, f"<i><b>Task Added Successfully!</b></i>\n\n    â€¢ <b>Task Name :</b> {taskInfo.title}\n    â€¢ <b>Task Link :</b> {args[1]}")
+    await sendMessage(message, f"<b>Task Added Successfully!</b>\n\n<b>Task Name :</b> {taskInfo.title}\n<b>Task Link :</b> {args[1]}")
