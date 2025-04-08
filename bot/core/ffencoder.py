@@ -54,7 +54,7 @@ class FFEncoder:
                 progress_str = f"""<blockquote>‣ <b>𝙰𝚗𝚒𝚖𝚎 𝙽𝚊𝚖𝚎 :</b> <b>{self.__name}</b></blockquote>
 <blockquote>‣ <b>𝚂𝚝𝚊𝚝𝚞𝚜 :</b>𝙴𝚗𝚌𝚘𝚍𝚒𝚗𝚐 𝙴𝚙𝚒𝚜𝚘𝚍𝚎
     <code>[{bar}]</code> {percent}%</blockquote> 
-<blockquote>   ‣ <b>𝚂𝚒𝚣𝚎 :</b> {convertBytes(ensize)} out of ~ {convertBytes(tsize)}
+<blockquote>‣ <b>𝚂𝚒𝚣𝚎 :</b> {convertBytes(ensize)} out of ~ {convertBytes(tsize)}
 ‣ <b>𝚂𝚙𝚎𝚎𝚍 :</b> {convertBytes(speed)}/s
 ‣ <b>𝚃𝚒𝚖𝚎 𝚃𝚘𝚘𝚔 :</b> {convertTime(diff)}
 ‣ <b>𝚃𝚒𝚖𝚎 𝙻𝚎𝚏𝚝 :</b> {convertTime(eta)}</blockquote>
