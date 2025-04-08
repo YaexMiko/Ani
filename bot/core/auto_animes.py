@@ -83,7 +83,7 @@ async def get_animes(name, torrent, force=False):
             ff_queued[post_id] = ffEvent
 
             if ffLock.locked():
-                await editMessage(stat_msg, f"â€£ <b>Anime Name :</b> <b><i>{name}</i></b>\n\n<i>Queued to Encode...</i>")
+                await editMessage(stat_msg, f"<b>Anime Name :</b> <b><i>{name}</i></b>\n\n<i>Queued to Encode...</i>")
                 await rep.report("Added Task to Queue...", "info")
 
             await ffQueue.put(post_id)
@@ -94,7 +94,7 @@ async def get_animes(name, torrent, force=False):
 
             for qual in Var.QUALS:
                 filename = await aniInfo.get_upname(qual)
-                await editMessage(stat_msg, f"â€£ <b>Anime Name :</b> <b><i>{name}</i></b>\n\n<i>Ready to Encode...</i>")
+                await editMessage(stat_msg, f"<b>Anime Name :</b> <b><i>{name}</i></b>\n\n<i>Ready to Encode...</i>")
                 await asleep(1.5)
                 await rep.report("Starting Encode...", "info")
 
@@ -107,7 +107,7 @@ async def get_animes(name, torrent, force=False):
                     return
 
                 await rep.report("Succesfully Compressed Now Going To Upload...", "info")
-                await editMessage(stat_msg, f"â€£ <b>Anime Name :</b> <b><i>{filename}</i></b>\n\n<i>Ready to Upload...</i>")
+                await editMessage(stat_msg, f"<b>Anime Name :</b> <b><i>{filename}</i></b>\n\n<i>Ready to Upload...</i>")
                 await asleep(1.5)
 
                 try:
