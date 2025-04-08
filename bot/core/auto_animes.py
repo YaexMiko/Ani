@@ -6,8 +6,8 @@ from aiofiles.os import remove as aioremove
 from traceback import format_exc
 from base64 import urlsafe_b64encode
 from time import time
+import random
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
-from pyrogram.errors import ChannelInvalid, PeerIdInvalid
 
 from bot import bot, bot_loop, Var, ani_cache, ffQueue, ffLock, ff_queued
 from .tordownload import TorDownloader
@@ -19,32 +19,13 @@ from .tguploader import TgUploader
 from .reporter import rep
 
 btn_formatter = {
-    '1080':'1080p', 
-    '720':'720p',
-    '480':'480p',
-    '360':'360p'
+    '1080': '1080p',
+    '720': '720p',
+    '480': '480p',
+    'Hdrip': 'HDRip',
 }
 
-async def verify_channel_access():
-    """Verify the bot has access to the main channel"""
-    try:
-        chat = await bot.get_chat(Var.MAIN_CHANNEL)
-        if not chat:
-            raise ValueError("Channel not found")
-        member = await bot.get_chat_member(Var.MAIN_CHANNEL, (await bot.get_me()).id)
-        if member.status not in ['creator', 'administrator', 'member']:
-            raise ValueError("Bot doesn't have sufficient privileges")
-        return True
-    except (ChannelInvalid, PeerIdInvalid, ValueError) as e:
-        await rep.report(f"Channel access verification failed: {str(e)}", "critical")
-        return False
-    except Exception as e:
-        await rep.report(f"Unexpected error in channel verification: {format_exc()}", "critical")
-        return False
-
 async def fetch_animes():
-    if not await verify_channel_access():
-        return
     await rep.report("Fetch Animes Started !!", "info")
     while True:
         await asleep(60)
@@ -58,145 +39,112 @@ async def get_animes(name, torrent, force=False):
         aniInfo = TextEditor(name)
         await aniInfo.load_anilist()
         ani_id, ep_no = aniInfo.adata.get('id'), aniInfo.pdata.get("episode_number")
-        
+
         if ani_id not in ani_cache['ongoing']:
             ani_cache['ongoing'].add(ani_id)
         elif not force:
             return
-            
+
         if not force and ani_id in ani_cache['completed']:
             return
-            
-        if force or (not (ani_data := await db.getAnime(ani_id)) \
-            or (ani_data and not (qual_data := ani_data.get(ep_no))) \
+
+        if force or (not (ani_data := await db.getAnime(ani_id))
+            or (ani_data and not (qual_data := ani_data.get(ep_no)))
             or (ani_data and qual_data and not all(qual for qual in qual_data.values()))):
-            
+
             if "[Batch]" in name:
                 await rep.report(f"Torrent Skipped!\n\n{name}", "warning")
                 return
-            
+
             await rep.report(f"New Anime Torrent Found!\n\n{name}", "info")
-            
-            # Try to send to channel with multiple fallbacks
-            post_msg = None
-            try:
-                poster = await aniInfo.get_poster()
-                caption = await aniInfo.get_caption()
-                
-                try:
-                    post_msg = await bot.send_photo(
-                        Var.MAIN_CHANNEL,
-                        photo=poster,
-                        caption=caption
-                    )
-                except Exception as photo_error:
-                    await rep.report(f"Photo send failed, trying text: {str(photo_error)}", "warning")
-                    try:
-                        post_msg = await sendMessage(Var.MAIN_CHANNEL, f"{caption}\n\nPoster: {poster}")
-                        if isinstance(post_msg, str):  # If sendMessage failed
-                            raise ValueError(post_msg)
-                    except Exception as text_error:
-                        await rep.report(f"Text send also failed: {str(text_error)}", "error")
-                        return
-            except Exception as e:
-                await rep.report(f"Failed to send to channel: {str(e)}", "error")
-                return
-            
+
+            post_msg = await bot.send_photo(
+                Var.MAIN_CHANNEL,
+                photo=await aniInfo.get_poster(),
+                caption=await aniInfo.get_caption()
+            )
+
+            # Send a random sticker after posting
+            if Var.POST_STICKERS:
+                await asleep(1)
+                await bot.send_sticker(Var.MAIN_CHANNEL, random.choice(Var.POST_STICKERS))
+
             await asleep(1.5)
             stat_msg = await sendMessage(Var.MAIN_CHANNEL, f"â€£ <b>Anime Name :</b> <b><i>{name}</i></b>\n\n<i>Downloading...</i>")
-            if isinstance(stat_msg, str):  # If sendMessage failed
-                await rep.report(f"Failed to send status message: {stat_msg}", "error")
-                return
-            
+
             dl = await TorDownloader("./downloads").download(torrent, name)
             if not dl or not ospath.exists(dl):
                 await rep.report(f"File Download Incomplete, Try Again", "error")
-                try:
-                    if not isinstance(stat_msg, str):
-                        await stat_msg.delete()
-                except:
-                    pass
+                await stat_msg.delete()
                 return
 
-            post_id = post_msg.id if hasattr(post_msg, 'id') else None
+            post_id = post_msg.id
             ffEvent = Event()
-            if post_id:
-                ff_queued[post_id] = ffEvent
+            ff_queued[post_id] = ffEvent
+
             if ffLock.locked():
                 await editMessage(stat_msg, f"â€£ <b>Anime Name :</b> <b><i>{name}</i></b>\n\n<i>Queued to Encode...</i>")
                 await rep.report("Added Task to Queue...", "info")
-            await ffQueue.put(post_id if post_id else 0)
+
+            await ffQueue.put(post_id)
             await ffEvent.wait()
-            
             await ffLock.acquire()
+
             btns = []
+
             for qual in Var.QUALS:
                 filename = await aniInfo.get_upname(qual)
                 await editMessage(stat_msg, f"â€£ <b>Anime Name :</b> <b><i>{name}</i></b>\n\n<i>Ready to Encode...</i>")
-                
                 await asleep(1.5)
                 await rep.report("Starting Encode...", "info")
+
                 try:
                     out_path = await FFEncoder(stat_msg, dl, filename, qual).start_encode()
                 except Exception as e:
-                    await rep.report(f"Error: {e}, Cancelled, Retry Again !", "error")
-                    try:
-                        if not isinstance(stat_msg, str):
-                            await stat_msg.delete()
-                    except:
-                        pass
+                    await rep.report(f"Error: {e}, Cancelled,  Retry Again !", "error")
+                    await stat_msg.delete()
                     ffLock.release()
                     return
-                await rep.report("Successfully Compressed Now Going To Upload...", "info")
-                
+
+                await rep.report("Succesfully Compressed Now Going To Upload...", "info")
                 await editMessage(stat_msg, f"â€£ <b>Anime Name :</b> <b><i>{filename}</i></b>\n\n<i>Ready to Upload...</i>")
                 await asleep(1.5)
+
                 try:
                     msg = await TgUploader(stat_msg).upload(out_path, qual)
                 except Exception as e:
-                    await rep.report(f"Error: {e}, Cancelled, Retry Again !", "error")
-                    try:
-                        if not isinstance(stat_msg, str):
-                            await stat_msg.delete()
-                    except:
-                        pass
+                    await rep.report(f"Error: {e}, Cancelled,  Retry Again !", "error")
+                    await stat_msg.delete()
                     ffLock.release()
                     return
-                await rep.report("Successfully Uploaded File into Tg...", "info")
-                
+
+                await rep.report("Succesfully Uploaded File into Tg...", "info")
                 msg_id = msg.id
+
                 link = f"https://telegram.me/{(await bot.get_me()).username}?start={await encode('get-'+str(msg_id * abs(Var.FILE_STORE)))}"
-                
-                if hasattr(post_msg, 'edit_message'):
+
+                if post_msg:
                     if len(btns) != 0 and len(btns[-1]) == 1:
                         btns[-1].insert(1, InlineKeyboardButton(f"{btn_formatter[qual]} - {convertBytes(msg.document.file_size)}", url=link))
                     else:
                         btns.append([InlineKeyboardButton(f"{btn_formatter[qual]} - {convertBytes(msg.document.file_size)}", url=link)])
-                    await editMessage(post_msg, post_msg.caption.html if hasattr(post_msg, 'caption') and post_msg.caption else "", InlineKeyboardMarkup(btns))
-                    
-                await db.saveAnime(ani_id, ep_no, qual, post_id if post_id else 0)
+
+                    await editMessage(post_msg, post_msg.caption.html if post_msg.caption else "", InlineKeyboardMarkup(btns))
+
+                await db.saveAnime(ani_id, ep_no, qual, post_id)
                 bot_loop.create_task(extra_utils(msg_id, out_path))
+
             ffLock.release()
-            
-            try:
-                if not isinstance(stat_msg, str):
-                    await stat_msg.delete()
-            except:
-                pass
+            await stat_msg.delete()
             await aioremove(dl)
+
         ani_cache['completed'].add(ani_id)
+
     except Exception as error:
-        await rep.report(f"Error in get_animes: {str(error)}\n\n{format_exc()}", "error")
+        await rep.report(format_exc(), "error")
 
 async def extra_utils(msg_id, out_path):
-    try:
-        msg = await bot.get_messages(Var.FILE_STORE, message_ids=msg_id)
-
-        if Var.BACKUP_CHANNEL != 0:
-            for chat_id in Var.BACKUP_CHANNEL.split():
-                try:
-                    await msg.copy(int(chat_id))
-                except Exception as e:
-                    await rep.report(f"Failed to backup to {chat_id}: {str(e)}", "warning")
-    except Exception as e:
-        await rep.report(f"Error in extra_utils: {str(e)}", "error")
+    msg = await bot.get_messages(Var.FILE_STORE, message_ids=msg_id)
+    if Var.BACKUP_CHANNEL != 0:
+        for chat_id in Var.BACKUP_CHANNEL.split():
+            await msg.copy(int(chat_id))
